@@ -8,6 +8,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
+#include "path_planner.h"
 
 using namespace std;
 
@@ -15,9 +16,9 @@ using namespace std;
 using json = nlohmann::json;
 
 // For converting back and forth between radians and degrees.
-constexpr double pi() { return M_PI; }
-double deg2rad(double x) { return x * pi() / 180; }
-double rad2deg(double x) { return x * 180 / pi(); }
+// constexpr double pi() { return M_PI; }
+// double deg2rad(double x) { return x * pi() / 180; }
+// double rad2deg(double x) { return x * 180 / pi(); }
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -135,33 +136,7 @@ vector<double> getFrenet(double x, double y, double theta, const vector<double> 
 
 }
 
-// Transform from Frenet s,d coordinates to Cartesian x,y
-vector<double> getXY(double s, double d, const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y)
-{
-	int prev_wp = -1;
 
-	while(s > maps_s[prev_wp+1] && (prev_wp < (int)(maps_s.size()-1) ))
-	{
-		prev_wp++;
-	}
-
-	int wp2 = (prev_wp+1)%maps_x.size();
-
-	double heading = atan2((maps_y[wp2]-maps_y[prev_wp]),(maps_x[wp2]-maps_x[prev_wp]));
-	// the x,y,s along the segment
-	double seg_s = (s-maps_s[prev_wp]);
-
-	double seg_x = maps_x[prev_wp]+seg_s*cos(heading);
-	double seg_y = maps_y[prev_wp]+seg_s*sin(heading);
-
-	double perp_heading = heading-pi()/2;
-
-	double x = seg_x + d*cos(perp_heading);
-	double y = seg_y + d*sin(perp_heading);
-
-	return {x,y};
-
-}
 
 int main() {
   uWS::Hub h;
@@ -239,13 +214,45 @@ int main() {
 
           	json msgJson;
 
+            /*INITIALIZE PATH PLANNER*/
+            double target_speed = 49.5;
+            int spacing = 0.2;
+            int total_points = 50;
+            int lane_id = 1;
+            PathPlanner path_planner(
+                target_speed,
+                lane_id,
+                spacing,
+                total_points,
+                map_waypoints_x,
+                map_waypoints_y,
+                map_waypoints_s,
+                map_waypoints_dx,
+                map_waypoints_dy
+            );  
+
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
+            path_planner.generateNewTrajectoryWithMinJerk(
+                       previous_path_x,
+                       previous_path_y, 
+                       car_x, 
+                       car_y, 
+                       car_s, 
+                       car_yaw,
+                       next_x_vals,
+                       next_y_vals,
+                       30.0);
 
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
+
+            std::cout << "Next x, y vals" << std::endl;
+            std::cout << msgJson["next_x"] << std::endl;
+            std::cout << msgJson["next_y"] << std::endl;
+
 
           	auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
