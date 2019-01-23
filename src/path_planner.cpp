@@ -98,7 +98,7 @@ void PathPlanner::initializeReferencePoints(const vector<double> &previous_path_
 	} else {
 		std::cout << "Initialized with points !" << std::endl;
 		std::cout << "previous_path_x" << std::endl;
-		//print_double(previous_path_x);
+		print_double(previous_path_x);
 
 		double prev_x = previous_path_x[prev_size - 1];
 		double prev_y = previous_path_y[prev_size - 1];
@@ -184,15 +184,60 @@ void generateNewPointsGivenTarget(double target_x,
 	double target_y = s_fit(target_x);
 	double target_dist = sqrt(target_x * target_x + target_y * target_y);
 	double x_add_on = 0;
-	for (int i = 1; i < total_points - prev_path_size; i++) {
-			double N = target_dist / (0.02 * target_speed/2.24); // 200ms * speed => convert to m/s
-			double x_point = i * (target_x / N);
+	double N = target_dist / (0.02 * target_speed/2.24);  // 200ms * speed => convert to m/s
+	double spacing = target_x / N;
+	// generate all points 
+	for (int i = 1; i < total_points - prev_path_size; i++) {		
+			double x_point = i * spacing;
 			double y_point = s_fit(x_point);
 			vector<double> point_glob = transformSinglePointToGlobal(x_point, y_point, ref_yaw, ref_x, ref_y);
 			next_x_vals.push_back(point_glob[0]);
 			next_y_vals.push_back(point_glob[1]);
-			//x_add_on = x_point; 
 	}
+}
+
+bool PathPlanner::isInSameLane(double other_d){
+	if ( (other_d < (2 + 4*lane_id_ + 2)) && (other_d > (2 + 4*lane_id_ - 2))) {
+		return true;
+	}
+	return false;
+}
+
+bool PathPlanner::needToSlowDown(vector<vector<double> > sensor_fusion, double car_s, double car_d, int prev_size) {
+	// check if any car is in the same lane and is in front of our car within 20m
+	bool need_slow_down = false;
+	for (vector<double> car_data: sensor_fusion) {	
+		double other_car_vx = car_data[3];
+		double other_car_vy = car_data[4];
+		double other_car_s = car_data[5];
+		double other_car_d = car_data[6];
+		double other_car_speed = sqrt(other_car_vx*other_car_vx + other_car_vy*other_car_vy);
+		if (isInSameLane(other_car_d)) {
+			double predict_other_car_s = other_car_s + 0.02 * other_car_speed *prev_size;
+			if (predict_other_car_s > car_s && ((predict_other_car_s - car_s) < safety_distance_)) {
+				return true;
+			}
+		}
+	} 
+}
+
+bool PathPlanner::canSpeedUp(vector<vector<double> > sensor_fusion, double car_s, double car_d, int prev_size) {
+	// check if any car is in the same lane and is in front of our car within 20m
+	bool need_slow_down = false;
+	for (vector<double> car_data: sensor_fusion) {	
+		double other_car_vx = car_data[3];
+		double other_car_vy = car_data[4];
+		double other_car_s = car_data[5];
+		double other_car_d = car_data[6];
+		double other_car_speed = sqrt(other_car_vx*other_car_vx + other_car_vy*other_car_vy);
+		if (isInSameLane(other_car_d)) {
+			double predict_other_car_s = other_car_s + 0.02 * other_car_speed *prev_size;
+			if (predict_other_car_s > car_s && ((predict_other_car_s - car_s) < (safety_distance_ * 2))) {
+				return false;
+			}
+		}
+	}
+	return true; 
 }
 
 
@@ -203,10 +248,12 @@ void PathPlanner::generateNewTrajectoryWithMinJerk(vector<double> prev_path_x,
 											 double car_x, 
 											 double car_y, 
 											 double car_s, 
+											 double car_d,
 											 double car_yaw,
 											 vector<double> &next_x_vals,
 											 vector<double> &next_y_vals,
-											 double target_x) {
+											 double target_x,
+											 vector<vector<double> > sensor_fusion) {
 
 	// 1.Calculate current heading angle 
 	
@@ -216,8 +263,11 @@ void PathPlanner::generateNewTrajectoryWithMinJerk(vector<double> prev_path_x,
 	double ref_y;
 	double ref_yaw;
 	initializeReferencePoints(prev_path_x, prev_path_y, car_yaw, car_x, car_y, pts_x, pts_y, ref_yaw, ref_x, ref_y);
-
+	std::cout << "Points " << endl;
+	print_double(pts_x);
+	print_double(pts_y);
 	addFixAnchorPoints(pts_x, pts_y, car_s);
+	
 	// need to convert all points to car ref 
 	transformToCarRef(pts_x, pts_y, ref_yaw, ref_x, ref_y);
 	
@@ -225,9 +275,8 @@ void PathPlanner::generateNewTrajectoryWithMinJerk(vector<double> prev_path_x,
 	// initialize spline to fit the next points
 	tk::spline spline_fit = initializeSpline(pts_x, pts_y);
 
-	std::cout << "Points " << endl;
-	print_double(pts_x);
-	print_double(pts_y);
+	
+	
 
 
 	// push old prev points to new path to smooth the trajectory
@@ -236,7 +285,15 @@ void PathPlanner::generateNewTrajectoryWithMinJerk(vector<double> prev_path_x,
 		next_y_vals.push_back(prev_path_y[i]);
 	}
 
-	
+	// slow down to avoid collision 
+	if (needToSlowDown(sensor_fusion, car_s, car_d, prev_path_x.size())) {
+		 std::cout << "Need to slow down !!! " << std::endl;
+		 target_speed_ = 24.5;
+	} 
+	else if (canSpeedUp(sensor_fusion, car_s, car_d, prev_path_x.size())) {
+		 std::cout << "Can Speed up now !!! " << std::endl;
+		 target_speed_ = 49.5;
+	}
 
 	generateNewPointsGivenTarget(target_x, 
 								spline_fit, 
@@ -251,6 +308,6 @@ void PathPlanner::generateNewTrajectoryWithMinJerk(vector<double> prev_path_x,
 								);
 
 	std::cout << "Output Points " << endl;
-	print_double(next_x_vals);
-	print_double(next_y_vals);
+	//print_double(next_x_vals);
+	//print_double(next_y_vals);
 }

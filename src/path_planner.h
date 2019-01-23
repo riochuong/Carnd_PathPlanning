@@ -31,15 +31,18 @@ class PathPlanner {
 											 double car_x, 
 											 double car_y, 
 											 double car_s, 
+											 double car_d,
 											 double car_yaw,
 											 vector<double> &next_x_vals,
 											 vector<double> &next_y_vals,
-											 double target_x);
+											 double target_x,
+											 vector<vector<double> > sensor_fusion);
 		
 	private:
 		double target_speed_;
 		unsigned int lane_id_;
 		double spacing_;
+		double safety_distance_ = 30.0; // m
 		unsigned int total_points_;
 		vector<double> map_waypoints_x_;
   		vector<double> map_waypoints_y_;
@@ -48,6 +51,9 @@ class PathPlanner {
  		vector<double> map_waypoints_dy_;
 		/* cost function */
 		double calculateTrajectoryCost(void);
+		bool needToSlowDown(vector<vector<double> > sensor_fusion, double car_s, double car_d, int prev_size);
+		bool isInSameLane(double other_d);
+		bool canSpeedUp(vector<vector<double> > sensor_fusion, double car_s, double car_d, int prev_size);
 		/* initialize reference points to start planning trajectory */
 		void initializeReferencePoints(const vector<double> &previous_path_x, 
 											const vector<double> &previous_path_y, 

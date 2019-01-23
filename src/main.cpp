@@ -78,10 +78,10 @@ int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
   if(angle > pi()/4)
   {
     closestWaypoint++;
-  if (closestWaypoint == maps_x.size())
-  {
-    closestWaypoint = 0;
-  }
+    if (closestWaypoint == maps_x.size())
+    {
+      closestWaypoint = 0;
+    }
   }
 
   return closestWaypoint;
@@ -175,7 +175,25 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  /*INITIALIZE PATH PLANNER*/
+  double target_speed = 49.5;
+  int spacing = 0.2;
+  int total_points = 30;
+  int lane_id = 1;
+  PathPlanner path_planner(
+        target_speed,
+        lane_id,
+        spacing,
+        total_points,
+        map_waypoints_x,
+        map_waypoints_y,
+        map_waypoints_s,
+        map_waypoints_dx,
+        map_waypoints_dy
+    );  
+
+
+  h.onMessage([&map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy, &path_planner](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -214,23 +232,7 @@ int main() {
 
           	json msgJson;
 
-            /*INITIALIZE PATH PLANNER*/
-            double target_speed = 49.5;
-            int spacing = 0.2;
-            int total_points = 50;
-            int lane_id = 1;
-            PathPlanner path_planner(
-                target_speed,
-                lane_id,
-                spacing,
-                total_points,
-                map_waypoints_x,
-                map_waypoints_y,
-                map_waypoints_s,
-                map_waypoints_dx,
-                map_waypoints_dy
-            );  
-
+            
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
             path_planner.generateNewTrajectoryWithMinJerk(
@@ -239,10 +241,12 @@ int main() {
                        car_x, 
                        car_y, 
                        car_s, 
+                       car_d,
                        car_yaw,
                        next_x_vals,
                        next_y_vals,
-                       30.0);
+                       30.0,
+                       sensor_fusion);
 
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
@@ -250,8 +254,8 @@ int main() {
           	msgJson["next_y"] = next_y_vals;
 
             std::cout << "Next x, y vals" << std::endl;
-            std::cout << msgJson["next_x"] << std::endl;
-            std::cout << msgJson["next_y"] << std::endl;
+            //std::cout << msgJson["next_x"] << std::endl;
+            //std::cout << msgJson["next_y"] << std::endl;
 
 
           	auto msg = "42[\"control\","+ msgJson.dump()+"]";
