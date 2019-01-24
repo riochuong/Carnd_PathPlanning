@@ -11,20 +11,23 @@
 using namespace std;
 constexpr double pi() { return M_PI; }
 
+int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vector<double> &maps_y);
+
+double distance(double x1, double y1, double x2, double y2);
 
 class PathPlanner {
 	public:
-		PathPlanner (
-		const double target_speed,
-		const unsigned int lane_id,
-		const double spacing,
-		const unsigned int total_points,
-		const vector<double> map_waypoints_x,
-  		const vector<double> map_waypoints_y,
- 		const vector<double> map_waypoints_s,
-  		const vector<double> map_waypoints_dx,
- 		const vector<double> map_waypoints_dy);
-		double get_target_speed () const { return target_speed_; } ;
+        PathPlanner (
+                double target_speed,
+                unsigned int lane_id,
+                double spacing,
+                unsigned int total_points,
+                vector<double> map_waypoints_x,
+                vector<double> map_waypoints_y,
+                vector<double> map_waypoints_s,
+                vector<double> map_waypoints_dx,
+                vector<double> map_waypoints_dy); 
+        double get_target_speed () const { return target_speed_; } ;
 		double setTargetSpeed(const double new_speed);
 		void generateNewTrajectoryWithMinJerk(vector<double> prev_path_x,
 												vector<double> prev_path_y, 
@@ -40,9 +43,10 @@ class PathPlanner {
 		
 	private:
 		double target_speed_;
-		unsigned int lane_id_;
-		double spacing_;
-        double safety_distance_ = 30.0; // m
+        int lane_id_;
+		bool changing_lane_complete_ = true;
+        double spacing_;
+        double safety_distance_ = 40.0; // m
 		unsigned int total_points_;
 		vector<double> map_waypoints_x_;
   		vector<double> map_waypoints_y_;
@@ -50,9 +54,23 @@ class PathPlanner {
   		vector<double> map_waypoints_dx_;
  		vector<double> map_waypoints_dy_;
 		/* cost function */
-		double calculateTrajectoryCost(void);
+        bool isLaneEmptyForChange(int lane_id,
+                          int car_s,
+                          vector<vector<double> > sensor_fusion, 
+                          vector<double> &maps_x, 
+                          vector<double> &maps_y,
+                          int prev_size);
+
+		int changeLaneIfPossible(double car_x, 
+                                       double car_y, 
+                                       double car_s,
+                                       vector<double> &maps_x, 
+                                       vector<double> &maps_y, 
+                                       vector<vector<double> > sensor_fusion,
+                                       int prev_size);
+ 
+        double calculateTrajectoryCost(void);
 		bool needToSlowDown(vector<vector<double> > sensor_fusion, double car_s, double car_d, int prev_size);
-		bool isInSameLane(double other_d);
 		bool canSpeedUp(vector<vector<double> > sensor_fusion, double car_s, double car_d, int prev_size);
 		/* initialize reference points to start planning trajectory */
 		void initializeReferencePoints(const vector<double> &previous_path_x, 

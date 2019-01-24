@@ -35,33 +35,6 @@ string hasData(string s) {
   return "";
 }
 
-double distance(double x1, double y1, double x2, double y2)
-{
-	return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
-}
-int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vector<double> &maps_y)
-{
-
-	double closestLen = 100000; //large number
-	int closestWaypoint = 0;
-
-	for(int i = 0; i < maps_x.size(); i++)
-	{
-		double map_x = maps_x[i];
-		double map_y = maps_y[i];
-		double dist = distance(x,y,map_x,map_y);
-		if(dist < closestLen)
-		{
-			closestLen = dist;
-			closestWaypoint = i;
-		}
-
-	}
-
-	return closestWaypoint;
-
-}
-
 int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x, const vector<double> &maps_y)
 {
 
@@ -178,7 +151,7 @@ int main() {
   /*INITIALIZE PATH PLANNER*/
   double target_speed = 0;
   int spacing = 0.2;
-  int total_points = 30;
+  int total_points = 20;
   int lane_id = 1;
   PathPlanner path_planner(
         target_speed,
@@ -245,7 +218,7 @@ int main() {
                        car_yaw,
                        next_x_vals,
                        next_y_vals,
-                       10.0,
+                       20.0,
                        sensor_fusion);
 
 

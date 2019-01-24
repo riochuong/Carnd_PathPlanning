@@ -4,6 +4,7 @@
 
 using namespace std;
 using namespace tk;
+bool isInSameLane(int lande_id, double other_d);
 static double deg2rad(double x) { return x * pi() / 180; }
 static double rad2deg(double x) { return x * 180 / pi(); }
 
@@ -12,6 +13,11 @@ static void print_double(vector<double> v) {
 		std::cout << n <<" ";
 	}
 	std::cout << std::endl;
+}
+
+double distance(double x1, double y1, double x2, double y2)
+{
+	return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
 }
 
 double PathPlanner::calculateTrajectoryCost(void) {
@@ -68,6 +74,122 @@ static vector<double> getXY(double s, double d, const vector<double> &maps_s, co
 	return {x,y};
 
 }
+
+int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vector<double> &maps_y)
+{
+
+	double closestLen = 100000; //large number
+	int closestWaypoint = 0;
+
+	for(int i = 0; i < maps_x.size(); i++)
+	{
+		double map_x = maps_x[i];
+		double map_y = maps_y[i];
+		double dist = distance(x,y,map_x,map_y);
+		if(dist < closestLen)
+		{
+			closestLen = dist;
+			closestWaypoint = i;
+		}
+
+	}
+
+	return closestWaypoint;
+
+}
+
+
+bool PathPlanner::isLaneEmptyForChange(int lane_id,
+                          int car_s,
+                          vector<vector<double> > sensor_fusion, 
+                          vector<double> &maps_x, 
+                          vector<double> &maps_y,
+                          int prev_size) {
+
+    for (vector<double> car_data: sensor_fusion) {
+		double other_car_x = car_data[1];
+		double other_car_y = car_data[2];
+		double other_car_vx = car_data[3];
+		double other_car_vy = car_data[4];
+		double other_car_s = car_data[5];
+		double other_car_d = car_data[6];
+		double other_car_speed = sqrt(other_car_vx*other_car_vx + other_car_vy*other_car_vy);
+        if (isInSameLane(lane_id, other_car_d)) {
+            // car is in the lane we are looking for 
+            std::cout << "Our car is at:  " << car_s << std::endl;
+            int other_car_wp =  ClosestWaypoint(other_car_x, other_car_y, maps_x, maps_y);
+		    double dx =  map_waypoints_x_[other_car_wp];
+		    double dy =  map_waypoints_y_[other_car_wp];
+            double vd = other_car_vx * dx + other_car_vy * dy;
+            double vs = other_car_speed * other_car_speed / vd;
+            double other_car_pred_s = other_car_s + vs * prev_size * 0.02; 
+            // check if it is possible to cross  
+            std::cout << "Car on lane: " << lane_id << "  is at:  " << other_car_pred_s << std::endl;
+            std::cout << "Diff s: " << car_s - other_car_pred_s << std::endl;
+            if (other_car_pred_s <= car_s) {
+                // other car is behind
+                if (other_car_speed >= (target_speed_ - 10)) { 
+                    
+                    std::cout << "other car is too fast behind" << std::endl;
+                    return false; 
+                } // toof fast 
+                else if (other_car_speed >= (target_speed_ - 10) && (car_s - other_car_s) < 50.0) {  
+                    std::cout << "other car is too close behind" << std::endl;
+                    return false;
+                } // too close  
+            }
+            else {
+                // other car is ahead 
+                if ((other_car_s - car_s) < 30.0) { 
+                    std::cout << "other car is too close ahead" << std::endl;
+                    return false;
+                } // too close 
+               else if (((other_car_s - car_s) < 50.0) && (other_car_speed < target_speed_)) { 
+                    std::cout << "other car is slow close ahead" << std::endl;
+                    return false; 
+                } // too slow
+            }
+        }
+
+    }
+    return true;
+}
+
+int PathPlanner::changeLaneIfPossible(double car_x, 
+                                       double car_y, 
+                                       double car_s,
+                                       vector<double> &maps_x, 
+                                       vector<double> &maps_y, 
+                                       vector<vector<double> > sensor_fusion,
+                                       int prev_size) {
+    bool left_change = false;
+    bool right_change = false;
+    int car_closest_waypoint = ClosestWaypoint(car_x, car_y, maps_x, maps_y);
+    if (this->lane_id_ == 1) {
+       left_change =  isLaneEmptyForChange(0, car_s, sensor_fusion, maps_x, maps_y, prev_size);
+       std::cout << " =========================== " << std::endl;
+       right_change =  isLaneEmptyForChange(2, car_s, sensor_fusion, maps_x, maps_y, prev_size);
+       std::cout << " =========================== " << std::endl;
+       std::cout << "Left Lane Can Be changed:  " <<  left_change << std::endl;
+       std::cout << "Right Lane Can Be changed:  " << right_change << std::endl;
+       if (left_change) { return 0;}
+       if (right_change) { return 2;}
+    } 
+    else if (this->lane_id_ == 0) {
+       if  (isLaneEmptyForChange(1, car_s, sensor_fusion, maps_x, maps_y, prev_size)){
+           std::cout << "Right Lane Can Be changed:  " << right_change << std::endl;
+           return 1;
+       } 
+    }
+    else if (this->lane_id_ == 2) {
+       if (isLaneEmptyForChange(1, car_s, sensor_fusion, maps_x, maps_y, prev_size)) {
+           std::cout << "Left Lane Can Be changed:  " << right_change << std::endl;
+           return 1;
+        }
+    }
+    return -1;
+}
+
 
 void PathPlanner::initializeReferencePoints(const vector<double> &previous_path_x, 
 											const vector<double> &previous_path_y, 
@@ -196,8 +318,8 @@ void generateNewPointsGivenTarget(double target_x,
 	}
 }
 
-bool PathPlanner::isInSameLane(double other_d){
-	if ( (other_d < (2 + 4*lane_id_ + 2)) && (other_d > (2 + 4*lane_id_ - 2))) {
+bool isInSameLane(int lane_id, double other_d){
+	if ( (other_d < (2 + 4*lane_id + 2)) && (other_d > (2 + 4*lane_id - 2))) {
 		return true;
 	}
 	return false;
@@ -212,7 +334,7 @@ bool PathPlanner::needToSlowDown(vector<vector<double> > sensor_fusion, double c
 		double other_car_s = car_data[5];
 		double other_car_d = car_data[6];
 		double other_car_speed = sqrt(other_car_vx*other_car_vx + other_car_vy*other_car_vy);
-		if (isInSameLane(other_car_d)) {
+		if (isInSameLane(this->lane_id_, other_car_d)) {
 			double predict_other_car_s = other_car_s + 0.02 * other_car_speed *prev_size;
 			if (predict_other_car_s > car_s && ((predict_other_car_s - car_s) < safety_distance_)) {
 				return true;
@@ -230,7 +352,7 @@ bool PathPlanner::canSpeedUp(vector<vector<double> > sensor_fusion, double car_s
 		double other_car_s = car_data[5];
 		double other_car_d = car_data[6];
 		double other_car_speed = sqrt(other_car_vx*other_car_vx + other_car_vy*other_car_vy);
-		if (isInSameLane(other_car_d)) {
+		if (isInSameLane(this->lane_id_, other_car_d)) {
 			double predict_other_car_s = other_car_s + 0.02 * other_car_speed *prev_size;
 			if (predict_other_car_s > car_s && ((predict_other_car_s - car_s) < (safety_distance_ + 15))) {
 				return false;
@@ -270,14 +392,44 @@ void PathPlanner::generateNewTrajectoryWithMinJerk(vector<double> prev_path_x,
 	
 	// need to convert all points to car ref 
 	transformToCarRef(pts_x, pts_y, ref_yaw, ref_x, ref_y);
-	
 
-	// initialize spline to fit the next points
-	tk::spline spline_fit = initializeSpline(pts_x, pts_y);
+    if (isInSameLane(lane_id_, car_d)) {
+        changing_lane_complete_ = true;
+    }
+    if (needToSlowDown(sensor_fusion, car_s, car_d, prev_path_x.size())) {
+        std::cout << "Need to slow down !!! " << std::endl;
+        if (changing_lane_complete_) {
+            int new_lane_id = changeLaneIfPossible(car_x, 
+                    car_y, 
+                    car_s,
+                    map_waypoints_x_, 
+                    map_waypoints_y_,
+                    sensor_fusion,
+                    prev_path_x.size());
 
-	
-	
+            if (new_lane_id >= 0) {
+                std::cout << "APPLY CHANGING LANE" << std::endl;
+                this->lane_id_ = new_lane_id;
+                this->changing_lane_complete_ = false;
+            }
+            else {
+                target_speed_ *= 0.98;
+            }
+        }   
+        else {
+            target_speed_ *= 0.98;
+        }
+    } 
+    else if (canSpeedUp(sensor_fusion, car_s, car_d, prev_path_x.size())) {
+        std::cout << "Can Speed up now !!! " << std::endl;
+        if (target_speed_ < 49.5) {
+            // slowly increase speed 
+            target_speed_ = (target_speed_ + 0.5) > 49.5 ? 49.5 : target_speed_+ 0.5;
+        }
+    }
 
+
+  	tk::spline spline_fit = initializeSpline(pts_x, pts_y);
 
 	// push old prev points to new path to smooth the trajectory
 	for (int i = 0; i < prev_path_x.size(); i++) {
@@ -286,20 +438,7 @@ void PathPlanner::generateNewTrajectoryWithMinJerk(vector<double> prev_path_x,
 	}
 
 	// slow down to avoid collision 
-	if (needToSlowDown(sensor_fusion, car_s, car_d, prev_path_x.size())) {
-		 std::cout << "Need to slow down !!! " << std::endl;
-		 target_speed_ *= 0.98;
-	} 
-	else if (canSpeedUp(sensor_fusion, car_s, car_d, prev_path_x.size())) {
-		 std::cout << "Can Speed up now !!! " << std::endl;
-         if (target_speed_ < 49.5) {
-             // slowly increase speed 
-             target_speed_ = (target_speed_ + 0.5) > 49.5 ? 49.5 : target_speed_+ 0.5;
-         }
-        
-
-	}
-
+std::cout << "Target Speed:  " << target_speed_ << " m/s" <<  std::endl;
 	generateNewPointsGivenTarget(target_x, 
 								spline_fit, 
 								next_x_vals, 
