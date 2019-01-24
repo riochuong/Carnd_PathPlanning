@@ -176,7 +176,7 @@ int main() {
   }
 
   /*INITIALIZE PATH PLANNER*/
-  double target_speed = 49.5;
+  double target_speed = 0;
   int spacing = 0.2;
   int total_points = 30;
   int lane_id = 1;
@@ -245,7 +245,7 @@ int main() {
                        car_yaw,
                        next_x_vals,
                        next_y_vals,
-                       30.0,
+                       10.0,
                        sensor_fusion);
 
 

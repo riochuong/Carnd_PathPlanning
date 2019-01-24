@@ -42,7 +42,7 @@ class PathPlanner {
 		double target_speed_;
 		unsigned int lane_id_;
 		double spacing_;
-		double safety_distance_ = 30.0; // m
+        double safety_distance_ = 30.0; // m
 		unsigned int total_points_;
 		vector<double> map_waypoints_x_;
   		vector<double> map_waypoints_y_;

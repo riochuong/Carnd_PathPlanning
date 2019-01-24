@@ -232,7 +232,7 @@ bool PathPlanner::canSpeedUp(vector<vector<double> > sensor_fusion, double car_s
 		double other_car_speed = sqrt(other_car_vx*other_car_vx + other_car_vy*other_car_vy);
 		if (isInSameLane(other_car_d)) {
 			double predict_other_car_s = other_car_s + 0.02 * other_car_speed *prev_size;
-			if (predict_other_car_s > car_s && ((predict_other_car_s - car_s) < (safety_distance_ * 2))) {
+			if (predict_other_car_s > car_s && ((predict_other_car_s - car_s) < (safety_distance_ + 15))) {
 				return false;
 			}
 		}
@@ -288,11 +288,16 @@ void PathPlanner::generateNewTrajectoryWithMinJerk(vector<double> prev_path_x,
 	// slow down to avoid collision 
 	if (needToSlowDown(sensor_fusion, car_s, car_d, prev_path_x.size())) {
 		 std::cout << "Need to slow down !!! " << std::endl;
-		 target_speed_ = 24.5;
+		 target_speed_ *= 0.98;
 	} 
 	else if (canSpeedUp(sensor_fusion, car_s, car_d, prev_path_x.size())) {
 		 std::cout << "Can Speed up now !!! " << std::endl;
-		 target_speed_ = 49.5;
+         if (target_speed_ < 49.5) {
+             // slowly increase speed 
+             target_speed_ = (target_speed_ + 0.5) > 49.5 ? 49.5 : target_speed_+ 0.5;
+         }
+        
+
 	}
 
 	generateNewPointsGivenTarget(target_x, 
