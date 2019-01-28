@@ -46,7 +46,7 @@ class PathPlanner {
         int lane_id_;
 		bool changing_lane_complete_ = true;
         double spacing_;
-        double safety_distance_ = 40.0; // m
+        double safety_distance_ = 25.0; // m
 		unsigned int total_points_;
 		vector<double> map_waypoints_x_;
   		vector<double> map_waypoints_y_;

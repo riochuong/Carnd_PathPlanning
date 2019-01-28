@@ -128,23 +128,23 @@ bool PathPlanner::isLaneEmptyForChange(int lane_id,
             std::cout << "Diff s: " << car_s - other_car_pred_s << std::endl;
             if (other_car_pred_s <= car_s) {
                 // other car is behind
-                if (other_car_speed >= (target_speed_ - 10)) { 
+                if ((car_s - other_car_pred_s) < 20.0) { 
                     
                     std::cout << "other car is too fast behind" << std::endl;
                     return false; 
                 } // toof fast 
-                else if (other_car_speed >= (target_speed_ - 10) && (car_s - other_car_s) < 50.0) {  
+                else if (((car_s - other_car_pred_s) < 35.0) && (other_car_speed >= target_speed_))  {  
                     std::cout << "other car is too close behind" << std::endl;
                     return false;
                 } // too close  
             }
             else {
                 // other car is ahead 
-                if ((other_car_s - car_s) < 30.0) { 
+                if ((other_car_pred_s - car_s) < 20.0) { 
                     std::cout << "other car is too close ahead" << std::endl;
                     return false;
                 } // too close 
-               else if (((other_car_s - car_s) < 50.0) && (other_car_speed < target_speed_)) { 
+               else if ((other_car_speed <  (target_speed_)) && (other_car_s - car_s) < 35.0) { 
                     std::cout << "other car is slow close ahead" << std::endl;
                     return false; 
                 } // too slow
@@ -244,9 +244,9 @@ void PathPlanner::initializeReferencePoints(const vector<double> &previous_path_
 }
 
 void PathPlanner::addFixAnchorPoints(vector<double> &x , vector<double> &y, double car_s) {
-	vector<double> p1 = getXY(car_s + 30, (2 + 4 * lane_id_), map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
-	vector<double> p2 = getXY(car_s + 60, (2 + 4 * lane_id_), map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
-	vector<double> p3 = getXY(car_s + 90, (2 + 4 * lane_id_), map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+	vector<double> p1 = getXY(car_s + 50, (2 + 4 * lane_id_), map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+	vector<double> p2 = getXY(car_s + 100, (2 + 4 * lane_id_), map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+	vector<double> p3 = getXY(car_s + 150, (2 + 4 * lane_id_), map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
 	
 	x.push_back(p1[0]);
 	x.push_back(p2[0]);
@@ -316,6 +316,18 @@ void generateNewPointsGivenTarget(double target_x,
 			next_x_vals.push_back(point_glob[0]);
 			next_y_vals.push_back(point_glob[1]);
 	}
+}
+
+bool isChangeLaneComplete(int lane_id, double other_d) {
+    
+    double middle_of_lane = 2 + 4*lane_id;
+    double diff = abs(middle_of_lane - other_d);
+    
+    std::cout << "diff lane: " << diff << std::endl;
+	if (diff <= 0.2){ 
+		return true;
+	}
+	return false;
 }
 
 bool isInSameLane(int lane_id, double other_d){
@@ -388,47 +400,51 @@ void PathPlanner::generateNewTrajectoryWithMinJerk(vector<double> prev_path_x,
 	std::cout << "Points " << endl;
 	print_double(pts_x);
 	print_double(pts_y);
-	addFixAnchorPoints(pts_x, pts_y, car_s);
+	// addFixAnchorPoints(pts_x, pts_y, car_s);
 	
 	// need to convert all points to car ref 
-	transformToCarRef(pts_x, pts_y, ref_yaw, ref_x, ref_y);
+	// transformToCarRef(pts_x, pts_y, ref_yaw, ref_x, ref_y);
 
-    if (isInSameLane(lane_id_, car_d)) {
+    if (!changing_lane_complete_ && isChangeLaneComplete(lane_id_, car_d)) {
         changing_lane_complete_ = true;
+        std::cout << "CHANGE LANE COMPLETE !!! " << std::endl;
     }
-    if (needToSlowDown(sensor_fusion, car_s, car_d, prev_path_x.size())) {
-        std::cout << "Need to slow down !!! " << std::endl;
-        if (changing_lane_complete_) {
-            int new_lane_id = changeLaneIfPossible(car_x, 
-                    car_y, 
-                    car_s,
-                    map_waypoints_x_, 
-                    map_waypoints_y_,
-                    sensor_fusion,
-                    prev_path_x.size());
 
-            if (new_lane_id >= 0) {
-                std::cout << "APPLY CHANGING LANE" << std::endl;
-                this->lane_id_ = new_lane_id;
-                this->changing_lane_complete_ = false;
-            }
+    if (changing_lane_complete_) {
+        if (needToSlowDown(sensor_fusion, car_s, car_d, prev_path_x.size())) {
+            std::cout << "Need to slow down !!! " << std::endl;
+            if (changing_lane_complete_) {
+                int new_lane_id = changeLaneIfPossible(car_x, 
+                        car_y, 
+                        car_s,
+                        map_waypoints_x_, 
+                        map_waypoints_y_,
+                        sensor_fusion,
+                        prev_path_x.size());
+
+                if (new_lane_id >= 0 && target_speed_ > 45.0) {
+                    std::cout << "APPLY CHANGING LANE" << std::endl;
+                    this->lane_id_ = new_lane_id;
+                    this->changing_lane_complete_ = false;
+                }
+                else {
+                    target_speed_ *= 0.98;
+                }
+            }   
             else {
                 target_speed_ *= 0.98;
             }
-        }   
-        else {
-            target_speed_ *= 0.98;
-        }
-    } 
-    else if (canSpeedUp(sensor_fusion, car_s, car_d, prev_path_x.size())) {
-        std::cout << "Can Speed up now !!! " << std::endl;
-        if (target_speed_ < 49.5) {
-            // slowly increase speed 
-            target_speed_ = (target_speed_ + 0.5) > 49.5 ? 49.5 : target_speed_+ 0.5;
+        } 
+        else if (canSpeedUp(sensor_fusion, car_s, car_d, prev_path_x.size())) {
+            std::cout << "Can Speed up now !!! " << std::endl;
+            if (target_speed_ < 49.5) {
+                // slowly increase speed 
+                target_speed_ = (target_speed_ + 0.5) > 49.5 ? 49.5 : target_speed_+ 0.5;
+            }
         }
     }
-
-
+    addFixAnchorPoints(pts_x, pts_y, car_s);
+	transformToCarRef(pts_x, pts_y, ref_yaw, ref_x, ref_y);
   	tk::spline spline_fit = initializeSpline(pts_x, pts_y);
 
 	// push old prev points to new path to smooth the trajectory
